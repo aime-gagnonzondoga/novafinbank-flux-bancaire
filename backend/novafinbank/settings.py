@@ -28,8 +28,10 @@ INSTALLED_APPS = [
     # Packages tiers
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'django_filters',
+    
 
     # Applications NovaFinBank
     'utilisateurs',

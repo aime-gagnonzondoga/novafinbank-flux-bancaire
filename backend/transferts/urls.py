@@ -1,8 +1,7 @@
 from django.urls import path
 
 from .views import (
-    EffectuerTransfertView,
-    ListeTransfertsClientView,
+    TransfertView,
     DetailTransfertView,
     ListeTousTransfertsView,
 )
@@ -11,18 +10,13 @@ app_name = 'transferts'
 
 urlpatterns = [
 
-    # ── Liste transferts du client ET effectuer un transfert ──
     # GET  /api/transferts/ → liste des transferts du client
     # POST /api/transferts/ → effectuer un transfert
-    # Django dispatch automatiquement selon la méthode HTTP
-    path('', ListeTransfertsClientView.as_view(), name='liste-transferts'),
+    path('', TransfertView.as_view(), name='transferts'),
 
-    # ── Tous les transferts — Admin uniquement ──
-    # GET /api/transferts/tous/
-    # IMPORTANT : 'tous/' avant '<int:pk>/' pour éviter conflit
+    # GET /api/transferts/tous/ → tous les transferts (Admin)
     path('tous/', ListeTousTransfertsView.as_view(), name='tous-transferts'),
 
-    # ── Détail d'un transfert ──
-    # GET /api/transferts/1/
+    # GET /api/transferts/1/ → détail d'un transfert
     path('<int:pk>/', DetailTransfertView.as_view(), name='detail-transfert'),
 ]

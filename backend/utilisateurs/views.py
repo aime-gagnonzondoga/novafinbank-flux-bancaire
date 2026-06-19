@@ -17,7 +17,7 @@ from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from rapports.models import LogSecurite
 
-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
 # On importe les modèles
 from .models import Utilisateur, Client, Agent
 
@@ -29,23 +29,6 @@ from .serializers import (
     AgentCreationSerializer,
     UtilisateurSerializer,
 )
-
-
-# ============================================
-# PERMISSION PERSONNALISÉE ADMINISTRATEUR
-# ============================================
-
-# EstAdministrateur vérifie que l'utilisateur connecté est un Administrateur
-# Utilisée dans CreerAgentView et ListeUtilisateursView (RG9)
-class EstAdministrateur(BasePermission):
-    """Permission réservée aux Administrateurs — RG9"""
-
-    def has_permission(self, request, view):
-        # L'utilisateur doit être connecté ET avoir le rôle ADMINISTRATEUR
-        return (
-            request.user.is_authenticated and
-            request.user.role == 'ADMINISTRATEUR'
-        )
 
 
 # ============================================
@@ -414,7 +397,6 @@ class LoginAgentView(APIView):
         # On cherche d'abord l'agent par matricule
         # pour récupérer son email lié à Utilisateur
         try:
-            from utilisateurs.models import Agent
             agent        = Agent.objects.select_related('utilisateur').get(
                 matricule=matricule
             )
