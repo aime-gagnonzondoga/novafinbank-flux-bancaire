@@ -42,37 +42,67 @@ from utilisateurs.permissions import EstAdministrateur, EstClient
 
 # EffectuerTransfertView gère la création d'un transfert
 # EstClient — uniquement accessible par un Client (RG6)
-class EffectuerTransfertView(APIView):
+# ============================================
+# VUE TRANSFERTS — GET liste + POST créer
+# ============================================
 
-    permission_classes = [EstClient]
+# TransfertView fusionne ListeTransfertsClientView et EffectuerTransfertView
+# GET  → liste des transferts du client connecté
+# POST → effectuer un transfert (réservé aux clients)
+class TransfertView(APIView):
+
+    # IsAuthenticated — session active requise (RG0)
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """Retourner tous les transferts du client connecté"""
+
+        try:
+            client = request.user.client
+        except Client.DoesNotExist:
+            return Response(
+                {'error': 'Profil client introuvable.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        comptes = client.comptes.all()
+
+        # Q — transferts émis ET reçus
+        transferts = Transfert.objects.filter(
+            Q(compte_source__in=comptes) | Q(compte_dest__in=comptes)
+        ).select_related(
+            'compte_source', 'compte_dest'
+        ).order_by('-date_heure')
+
+        serializer = TransfertSerializer(transferts, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def post(self, request):
-        """Effectuer un transfert entre deux comptes"""
+        """Effectuer un transfert — réservé aux Clients"""
+
+        # Vérification manuelle du rôle CLIENT
+        if request.user.role != 'CLIENT':
+            return Response(
+                {'error': 'Accès refusé. Seuls les clients peuvent effectuer un transfert.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
         serializer = EffectuerTransfertSerializer(data=request.data)
 
         if serializer.is_valid(raise_exception=True):
             validated_data = serializer.validated_data
+            compte_source  = validated_data['compte_source']
+            compte_dest    = validated_data['compte_dest']
+            montant        = validated_data['montant']
+            frais          = validated_data['frais']
 
-            compte_source = validated_data['compte_source']
-            compte_dest   = validated_data['compte_dest']
-            montant       = validated_data['montant']
-            frais         = validated_data['frais']
-
-            # transaction.atomic() — tout ou rien
-            # Si une opération échoue → tout est annulé
-            # Critique pour éviter les pertes d'argent (RG6)
             with db_transaction.atomic():
-
-                # Débiter le compte source — montant + frais (RG6)
                 compte_source.solde -= (montant + frais)
                 compte_source.save()
 
-                # Créditer le compte destination — montant uniquement (RG6)
                 compte_dest.solde += montant
                 compte_dest.save()
 
-                # Créer le transfert — RG6
                 transfert = Transfert.objects.create(
                     montant       = montant,
                     frais         = frais,
@@ -81,7 +111,6 @@ class EffectuerTransfertView(APIView):
                     compte_dest   = compte_dest,
                 )
 
-                # Créer transaction TRANSFERT_DEBIT — RG6, RG7
                 Transaction.objects.create(
                     type      = 'TRANSFERT_DEBIT',
                     montant   = montant,
@@ -91,8 +120,6 @@ class EffectuerTransfertView(APIView):
                     transfert = transfert,
                 )
 
-                # Créer transaction TRANSFERT_CREDIT — RG6, RG7
-                # frais = 0 sur le crédit — RG6
                 Transaction.objects.create(
                     type      = 'TRANSFERT_CREDIT',
                     montant   = montant,
@@ -111,43 +138,6 @@ class EffectuerTransfertView(APIView):
                 },
                 status=status.HTTP_201_CREATED
             )
-
-
-# ============================================
-# VUE LISTE TRANSFERTS CLIENT
-# ============================================
-
-# ListeTransfertsClientView retourne tous les transferts du client connecté
-# IsAuthenticated — RG0
-class ListeTransfertsClientView(APIView):
-
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        """Retourner tous les transferts du client connecté"""
-
-        # Client.DoesNotExist — spécifique et précis
-        try:
-            client = request.user.client
-        except Client.DoesNotExist:
-            return Response(
-                {'error': 'Profil client introuvable.'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        # Récupérer tous les comptes du client
-        comptes = client.comptes.all()
-
-        # Q(source) | Q(dest) — transferts émis ET reçus
-        transferts = Transfert.objects.filter(
-            Q(compte_source__in=comptes) | Q(compte_dest__in=comptes)
-        ).select_related(
-            'compte_source', 'compte_dest'
-        ).order_by('-date_heure')
-
-        serializer = TransfertSerializer(transferts, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
 
 # ============================================
 # VUE DÉTAIL TRANSFERT

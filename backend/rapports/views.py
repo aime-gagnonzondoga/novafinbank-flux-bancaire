@@ -1,36 +1,57 @@
+# APIView permet de créer des vues basées sur des classes
 from rest_framework.views import APIView
+
+# Response permet de retourner des réponses JSON
 from rest_framework.response import Response
+
+# status contient les codes HTTP
 from rest_framework import status
+
+# IsAuthenticated — session active requise (RG0)
 from rest_framework.permissions import IsAuthenticated
 
+# On importe les modèles
 from .models import ActionAgent, LogSecurite, Parametre
+
+# On importe les serializers
 from .serializers import (
     ActionAgentSerializer,
     LogSecuriteSerializer,
     ParametreSerializer,
     ModifierParametreSerializer,
 )
-from utilisateurs.permissions import EstAdministrateur, EstAgent
+
+# EstAgent supprimé — non utilisé dans ce fichier
+from utilisateurs.permissions import EstAdministrateur
 
 
 # ============================================
 # VUE LISTE ACTIONS AGENT
 # ============================================
 
-# ListeActionsAgentView retourne toutes les actions d'un agent
-# RG2 — traçabilité
+# ListeActionsAgentView retourne toutes les actions de l'agent connecté
+# IsAuthenticated — RG0
+# Conforme à RG2 — traçabilité des actions agent
 class ListeActionsAgentView(APIView):
 
-    # IsAuthenticated — session active requise (RG0)
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         """Retourner toutes les actions de l'agent connecté"""
 
-        # Vérifier que l'utilisateur est un agent
+        # Vérifier que l'utilisateur connecté est bien un agent
+        # On vérifie le rôle d'abord — plus propre que except Exception
+        if request.user.role != 'AGENT':
+            return Response(
+                {'error': 'Accès refusé. Réservé aux agents.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Récupérer le profil agent via la relation OneToOne
+        # AttributeError — si la relation agent n'existe pas
         try:
             agent = request.user.agent
-        except Exception:
+        except AttributeError:
             return Response(
                 {'error': 'Profil agent introuvable.'},
                 status=status.HTTP_404_NOT_FOUND
@@ -38,6 +59,7 @@ class ListeActionsAgentView(APIView):
 
         # Récupérer toutes les actions de cet agent
         # select_related → évite requêtes supplémentaires
+        # order_by('-date') → plus récent en premier
         actions = ActionAgent.objects.select_related(
             'agent', 'compte'
         ).filter(agent=agent).order_by('-date')
@@ -47,14 +69,13 @@ class ListeActionsAgentView(APIView):
 
 
 # ============================================
-# VUE LISTE TOUS LES LOGS DE SÉCURITÉ
+# VUE LISTE LOGS DE SÉCURITÉ
 # ============================================
 
 # ListeLogsSecuriteView retourne tous les logs — Admin uniquement
-# RG9 — l'administrateur peut consulter les logs de sécurité
+# EstAdministrateur — RG9
 class ListeLogsSecuriteView(APIView):
 
-    # EstAdministrateur — RG9
     permission_classes = [EstAdministrateur]
 
     def get(self, request):
@@ -72,11 +93,10 @@ class ListeLogsSecuriteView(APIView):
 # VUE LISTE PARAMÈTRES
 # ============================================
 
-# ListeParametresView retourne tous les paramètres
+# ListeParametresView retourne tous les paramètres globaux
 # EstAdministrateur — RG9
 class ListeParametresView(APIView):
 
-    # EstAdministrateur — RG9
     permission_classes = [EstAdministrateur]
 
     def get(self, request):
@@ -95,13 +115,12 @@ class ListeParametresView(APIView):
 # EstAdministrateur — RG9
 class ModifierParametreView(APIView):
 
-    # EstAdministrateur — RG9
     permission_classes = [EstAdministrateur]
 
     def patch(self, request, cle):
         """Modifier la valeur d'un paramètre global"""
 
-        # Récupérer le paramètre par sa clé
+        # Récupérer le paramètre par sa clé unique
         try:
             parametre = Parametre.objects.get(cle=cle)
         except Parametre.DoesNotExist:
@@ -111,15 +130,13 @@ class ModifierParametreView(APIView):
             )
 
         # Valider la nouvelle valeur
-        # On passe la clé dans le contexte pour validation spécifique
+        # La clé est passée dans le contexte pour validation spécifique
         serializer = ModifierParametreSerializer(
             data=request.data,
             context={'cle': cle}
         )
 
         if serializer.is_valid(raise_exception=True):
-
-            # Mettre à jour la valeur
             parametre.valeur = serializer.validated_data['valeur']
             parametre.save()
 
@@ -136,11 +153,9 @@ class ModifierParametreView(APIView):
 # VUE LISTE TOUTES LES ACTIONS AGENTS
 # ============================================
 
-# ListeToutesActionsView retourne toutes les actions — Admin uniquement
-# RG9
+# ListeToutesActionsView — Admin uniquement — RG9
 class ListeToutesActionsView(APIView):
 
-    # EstAdministrateur — RG9
     permission_classes = [EstAdministrateur]
 
     def get(self, request):
